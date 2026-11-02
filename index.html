@@ -120,12 +120,21 @@ const races = {
 };
 
 const monsters = {
-  Slime:{hp:30,attack:5,xp:10},Rat:{hp:40,attack:6,xp:15},Snake:{hp:50,attack:8,xp:20},
-  Hawk:{hp:60,attack:10,xp:30},"Baby Wyvern":{hp:100,attack:15,xp:50},
-  "Horned Rabbit":{hp:45,attack:9,xp:25},
-  "Horned Rabbit Alpha":{hp:130,attack:16,xp:100,goldBonus:150}
+  Slime:{level:1,hp:65,mp:10,attack:9,defense:6,speed:12,magic:2,xp:20,gold:12},
+  Rat:{level:2,hp:72,mp:12,attack:11,defense:7,speed:14,magic:2,xp:30,gold:18},
+  Snake:{level:4,hp:88,mp:16,attack:15,defense:10,speed:16,magic:4,xp:50,gold:28},
+  Hawk:{level:6,hp:104,mp:20,attack:19,defense:13,speed:18,magic:5,xp:75,gold:40},
+  "Baby Wyvern":{level:10,hp:136,mp:28,attack:27,defense:19,speed:17,magic:8,xp:130,gold:70},
+  "Horned Rabbit":{level:3,hp:78,mp:8,attack:12,defense:8,speed:15,magic:2,xp:35,gold:20},
+  "Horned Rabbit Alpha":{level:8,hp:160,mp:20,attack:23,defense:15,speed:16,magic:4,xp:110,gold:150}
 };
 const forestPool = ["Slime","Rat","Snake","Hawk","Baby Wyvern"];
+const travelBandits = {
+  Bandit:{level:11,xp:150,gold:100},
+  "Bandit Vet":{level:13,xp:200,gold:200},
+  "Bandit Chief":{level:20,xp:400,gold:300}
+};
+const TRAVEL_STEPS = 15;
 
 const consumables = {
   "Potion":{price:50,heal:30,desc:"Restores 30 HP"},
@@ -176,6 +185,7 @@ let player=null, mission=null, progress=0, gate=null, enemy=null, inCombat=false
 let town="murim-village", retScreen="murim-village", abOpen=false, sheetTab=null, current="title";
 let sel={name:"",gender:null,race:null,class:null,img:null}, rollsLeft=10, logLines=[];
 let soundOn=true, audioCtx=null;
+let travel={alliance:0,village:0,route:null};
 
 /* ============ UTIL ============ */
 const rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
@@ -211,13 +221,13 @@ function combinedStats(r,c){const m=races[r].mods,b=classes[c],f={};
 const hasSave=()=>{try{return !!localStorage.getItem(SAVE_KEY)}catch(e){return false}};
 function saveGame(quiet){
   if(!player||inCombat) return;
-  try{localStorage.setItem(SAVE_KEY,JSON.stringify({v:2,player,mission,progress,town}));
+  try{localStorage.setItem(SAVE_KEY,JSON.stringify({v:2,player,mission,progress,town,travel}));
     if(!quiet) log("Game saved.","info");}catch(e){if(!quiet)log("Could not save (storage unavailable).","bad");}
 }
 function loadGame(){
   let d; try{d=JSON.parse(localStorage.getItem(SAVE_KEY));}catch(e){}
   if(!d||!d.player){log("No saved game found.","bad");return;}
-  player=d.player; mission=d.mission||null; progress=d.progress||0; town=d.town||"murim-village";
+  player=d.player; mission=d.mission||null; progress=d.progress||0; town=d.town||"murim-village"; travel=Object.assign({alliance:0,village:0,route:null},d.travel||{});
   player.buffs=player.buffs||{def:0,defT:0,spd:0,spdT:0,evade:false};
   player.equipment=player.equipment||{weapon:null,armor:null};
   player.inventory=player.inventory||[]; player.hunterXp=player.hunterXp||0;
@@ -226,7 +236,7 @@ function loadGame(){
 }
 function newGame(){
   if(player && !confirm("Start a new game? Unsaved progress will be lost.")) return;
-  player=null;mission=null;progress=0;gate=null;enemy=null;inCombat=false;closeSheet();show("creation");
+  player=null;mission=null;progress=0;gate=null;enemy=null;inCombat=false;travel={alliance:0,village:0,route:null};closeSheet();show("creation");
 }
 
 /* ============ SCREENS ============ */
@@ -255,7 +265,7 @@ const screens={
   "murim-village"(){const can=player.level>=10&&player.gold>=8000;
     return `<div class="card"><h3>Murim Village</h3>
     <div class="row">${btn("Visit Merchant","show('merchant')")}${btn("Go to the Woods","show('forest')")}
-    ${btn("Hunters Guild","show('hunters-guild')")}${btn("Inn (30g) – full rest","rest()",false,"alt")}</div>
+    ${btn("Hunters Guild","show('hunters-guild')")}${btn("Inn (30g) – full rest","rest()",false,"alt")}${btn("Travel to Alliance","openTravel('alliance')",false,"alt")}</div>
     ${btn("Warp Gate to Murim Alliance (8,000g)","warp('murim-alliance')",!can,"big")}
     ${can?"":`<div class="muted">Warp Gate needs level 10 and 8,000 gold.</div>`}</div>`;},
 
@@ -272,7 +282,7 @@ const screens={
     return `<div class="card"><h3>Murim Alliance City</h3><p class="muted">A bustling stronghold filled with elite warriors and powerful merchants.</p>
     <div class="row">${btn("Hunters Guild HG","show('alliance-guild')")}${btn("Divine Supply","show('divine-supply')")}
     ${btn("Gates","show('gate-selection')")}${btn("Void Gate (Locked)","show('void-gate')",false,"alt")}
-    ${btn("Inn (30g)","rest()",false,"alt")}</div>
+    ${btn("Inn (30g)","rest()",false,"alt")}${btn("Travel to Village","openTravel('village')",false,"alt")}</div>
     ${btn("Use Warp Gate (8,000g)","warp('murim-village')",!can,"big")}</div>`;},
 
   "void-gate"(){return `<div class="card"><h3>Void Gate</h3>
@@ -290,6 +300,9 @@ const screens={
     <p>Wave ${gate.wave} of ${gate.total} awaits.</p>
     <div class="row">${btn("Next Wave","nextWave()",false,"")}${btn("Use Potion ("+count("Potion")+")","useItem('Potion')",count("Potion")<1,"alt")}
     ${btn("Leave Gate","leaveGate()")}</div></div>`;},
+
+  "travel-alliance"(){return travelHtml("alliance");},
+  "travel-village"(){return travelHtml("village");},
 
   combat(){return combatHtml();}
 };
@@ -348,7 +361,7 @@ Hunter Rank: ${player.hunterRank||"None"}</pre>
     if(player.hunterRank){const n=rankThresholds[player.hunterRank];
       h+=`<div class="lbl">Hunter Rank ${player.hunterRank}</div><div class="muted">${n?`Hunter points: ${player.hunterXp}/${n}`:"Max rank reached!"}</div>`;}
   } else if(sheetTab==="menu"){
-    h=`<h3>Menu</h3>${btn("Save Game","saveGame()",inCombat,"big")}${btn("Load Game","if(confirm('Load saved game? Current progress will be lost.'))loadGame()",inCombat||!hasSave(),"big alt")}
+    h=`<h3>Menu</h3>${btn("Save Game","saveGame()",inCombat,"big")}${btn("Load Game","loadGame()",inCombat||!hasSave(),"big alt")}
     ${btn("Sound: "+(soundOn?"On":"Off"),"toggleSound()",false,"big alt")}${btn("New Game","closeSheet();newGame()",false,"big alt")}
     <div class="muted center">The game also autosaves as you play.</div>`;
   }
@@ -388,7 +401,7 @@ function startGame(){
   player={name:sel.name,gender:sel.gender,race:sel.race,class:sel.class,img:sel.img,...s,maxHp:s.hp,maxMp:s.mp,
     xp:0,gold:0,level:1,hunterXp:0,hunterRank:null,inventory:[...c.inventory],equipment:{weapon:null,armor:null},
     abilities:c.abilities.map(a=>({...a})),buffs:{def:0,defT:0,spd:0,spdT:0,evade:false},defending:false};
-  mission=null;progress=0;gate=null;logLines=[];log(`${player.name} the ${player.race} ${player.class} begins their journey.`,"info");
+  mission=null;progress=0;gate=null;travel={alliance:0,village:0,route:null};logLines=[];log(`${player.name} the ${player.race} ${player.class} begins their journey.`,"info");
   show("path-selection");
 }
 
@@ -400,9 +413,60 @@ function rest(){
 function warp(dest){
   if(player.level<10)return log("You must be level 10 or higher to use the Warp Gate.","bad");
   if(player.gold<8000)return log("You need 8,000 gold to use the Warp Gate.","bad");
-  if(!confirm("Spend 8,000 gold to use the Warp Gate?"))return;
   player.gold-=8000;log("You step through the shimmering gate.","info");show(dest);
 }
+/* ============ TRAVEL ============ */
+function travelHtml(route){
+  const dest=route==="alliance"?"Murim Alliance":"Murim Village",n=travel[route],
+        back=route==="alliance"?"murim-village":"murim-alliance";
+  return `<div class="card"><h3>Road to ${dest}</h3>
+    <p>${route==="alliance"?"The road is long and dangerous.":"The return road stretches far across the land."}</p>
+    <p class="muted">Bandits roam here (Lv 11+). Recommended level 10 or higher.</p>
+    <div class="bar enemy" style="margin:.6rem 0"><i style="width:${pct(n,TRAVEL_STEPS)}%;background:#2d6cdf"></i><span>Travel progress ${n}/${TRAVEL_STEPS}</span></div>
+    <div class="row">${btn("Travel",`travelStep('${route}')`)}${btn("Back",`travelBack('${route}')`,false,"alt")}</div></div>`;
+}
+function openTravel(route){
+  if(travel[route]===0&&!confirm(`The road is dangerous (bandits Lv 11+, recommended level 10+). Set out for ${route==="alliance"?"Murim Alliance":"Murim Village"}?`))return;
+  travel.route=route;show("travel-"+route);
+}
+function travelBack(route){
+  if(travel[route]>0)return log("You cannot go back while traveling.","bad");
+  travel.route=null;show(route==="alliance"?"murim-village":"murim-alliance");
+}
+function travelStep(route){
+  travel.route=route;travel[route]++;
+  log(`You travel toward ${route==="alliance"?"Murim Alliance":"Murim Village"}. (${travel[route]}/${TRAVEL_STEPS})`);
+  if(travelHazard(route))return;
+  afterTravel();
+}
+function travelHazard(route){
+  const r=Math.random()*100;
+  const fight=n=>{const d=travelBandits[n],st=banditStats(d.level);
+    enemy={name:n,...st,xp:d.xp,gold:d.gold,isBoss:false,isTravel:true,slowT:0,boost:0};
+    retScreen="travel-"+route;log(`A Level ${d.level} ${n} attacks you on the road!`,"bad");
+    startCombat(enemy);return true;};
+  if(r<50)return fight("Bandit");
+  if(r<80)return fight("Bandit Vet");
+  if(r<85)return fight("Bandit Chief");
+  if(r<95){const g=rnd(1,100);player.gold+=g;log(`You find ${g} gold on the road.`,"gold");}
+  else{player.hp=Math.max(1,player.hp-15);log("An arrow strikes you from the roadside! You lose 15 HP.","bad");}
+  return false;
+}
+function banditStats(level){
+  const b=combinedStats("Orc","Warrior"),l=level-1;
+  const hp=b.hp+l*10;
+  return {level,hp,maxHp:hp,mp:b.mp+l*5,attack:b.attack+l*2,defense:b.defense+l*2,speed:b.speed,magic:b.magic};
+}
+function afterTravel(){
+  const route=travel.route;if(!route)return show(town);
+  if(travel[route]>=TRAVEL_STEPS){
+    travel={alliance:0,village:0,route:null};
+    log(`You arrive at ${route==="alliance"?"Murim Alliance":"Murim Village"}.`,"good");
+    return show(route==="alliance"?"murim-alliance":"murim-village");
+  }
+  show("travel-"+route);
+}
+
 function shopHtml(title,items,equip,back){
   let h=`<div class="card"><h3>${title}</h3><div class="muted">Gold: ${player.gold}</div>`;
   items.forEach(n=>{const c=consumables[n];h+=`<div class="item"><span>${n} <small>${c.desc}</small></span>${btn(c.price+"g",`buyItem('${n}')`,player.gold<c.price,"sm")}</div>`;});
@@ -453,23 +517,24 @@ function rankUp(){
 function exploreForest(){
   const r=Math.random();
   if(r<.55){
-    let n=pick(forestPool); if(mission&&forestPool.includes(mission.target)&&Math.random()<.4)n=mission.target;
-    retScreen="forest";log(`A wild ${n} appears!`);startCombat(makeMonster(n));
+    const pool=forestPool.filter(n=>monsters[n].level<=player.level+3);
+    let n=pick(pool); if(mission&&pool.includes(mission.target)&&Math.random()<.4)n=mission.target;
+    retScreen="forest";log(`A wild Level ${monsters[n].level} ${n} appears!`);startCombat(makeMonster(n));
   }else if(r<.78){const g=rnd(10,30)+player.level*2;player.gold+=g;log(`You found ${g} gold!`,"gold");updateHud();}
   else if(r<.86){player.inventory.push("Potion");log("You found a Potion in the underbrush!","good");}
   else log("The forest is quiet...");
 }
 function makeMonster(n){
-  const b=monsters[n],sc=Math.min(3,1+.06*(player.level-1));
-  const hp=Math.round(b.hp*sc);
-  return {name:n,hp,maxHp:hp,attack:Math.round(b.attack*sc),xp:b.xp,goldBonus:b.goldBonus||0,isBoss:false,slowT:0,boost:0};
+  const b=monsters[n];
+  return {name:n,level:b.level,hp:b.hp,maxHp:b.hp,mp:b.mp,attack:b.attack,defense:b.defense,speed:b.speed,magic:b.magic,
+    xp:b.xp,gold:b.gold,goldBonus:0,isBoss:false,slowT:0,boost:0};
 }
 function enterGate(){
   gate={name:"Horned Rabbit Gate",wave:1,total:5};log("You step into the E-Rank Horned Rabbit Gate...","info");nextWave();
 }
 function nextWave(){
   const n=gate.wave===gate.total?"Horned Rabbit Alpha":"Horned Rabbit";
-  retScreen="gate-run";log(gate.wave===gate.total?"The Alpha Horned Rabbit emerges!":`Wave ${gate.wave}: a Horned Rabbit charges!`);
+  retScreen="gate-run";log(gate.wave===gate.total?"The Alpha Horned Rabbit emerges!":`Wave ${gate.wave}: a Level ${monsters[n].level} Horned Rabbit charges!`);
   startCombat(makeMonster(n));
 }
 function leaveGate(){gate=null;log("You leave the gate.");show("murim-alliance");}
@@ -478,7 +543,7 @@ function leaveGate(){gate=null;log("You leave the gate.");show("murim-alliance")
 function startCombat(e){enemy=e;inCombat=true;abOpen=false;player.defending=false;closeSheet();show("combat");renderCombat();}
 function combatHtml(){
   if(!enemy)return "";const e=enemy,hasP=count("Potion"),hasS=count("Fire Scroll");
-  let h=`<div class="card ${e.isBoss?"boss":""}"><h3>${e.isBoss?`<span style="color:#f44">BOSS FIGHT</span> – `:""}${e.name}${gate?` <span class="muted">(Wave ${gate.wave}/${gate.total})</span>`:""}</h3>
+  let h=`<div class="card ${e.isBoss?"boss":""}"><h3>${e.isBoss?`<span style="color:#f44">BOSS FIGHT</span> – `:""}${e.isBoss?e.name:`Lv ${e.level} ${e.name}`}${gate?` <span class="muted">(Wave ${gate.wave}/${gate.total})</span>`:""}</h3>
   <div class="bar enemy"><i style="width:${pct(e.hp,e.maxHp)}%"></i><span>${e.hp}/${e.maxHp}</span></div>
   <div class="row" style="margin-top:.6rem">${btn("Attack","act('attack')")}${btn("Defend","act('defend')")}${btn("Abilities ▾","toggleAb()",false,"alt")}${btn("Run","act('run')",e.isBoss,"alt")}</div>`;
   if(abOpen){h+=`<div class="lbl" style="margin-top:.4rem">Abilities</div><div class="row">`;
@@ -494,6 +559,10 @@ function renderCombat(){if(!enemy)return;$("area").innerHTML=combatHtml();update
 function toggleAb(){abOpen=!abOpen;renderCombat();}
 
 function rollCrit(d){if(Math.random()<.1){log("Critical hit!","gold");sfx.crit();return Math.floor(d*1.5);}sfx.hit();return d;}
+function calcDamage(base,kind){
+  const def=enemy.defense||0;
+  return Math.max(2,base-(kind==="magic"?Math.floor(def/2):def));
+}
 function hitEnemy(d,label){
   enemy.hp=Math.max(0,enemy.hp-d);log(`${label} for ${d} damage.`);
   if(enemy.hp<=0)return victory();
@@ -502,12 +571,13 @@ function hitEnemy(d,label){
 function act(k){
   if(!inCombat||!enemy)return;
   if(k==="attack"){
-    const basic=player.class==="Mage"?Math.max(totalAttack(),Math.floor(totalMagic()*.8)):totalAttack();
-    hitEnemy(rollCrit(basic),`You hit ${enemy.name}`);
+    let dmg=calcDamage(totalAttack(),"phys");
+    if(player.class==="Mage")dmg=Math.max(dmg,calcDamage(Math.floor(totalMagic()*.8),"magic"));
+    hitEnemy(rollCrit(dmg),`You hit ${enemy.name}`);
   }else if(k==="defend"){player.defending=true;log("You brace for the attack.");enemyTurn();}
   else if(k==="run"){
     if(enemy.isBoss)return log("You can't run from a boss!","bad");
-    if(Math.random()<Math.min(.85,.4+totalSpeed()*.02)){log("You fled the battle.");enemy=null;inCombat=false;gate=null;show(retScreen==="gate-run"?"murim-alliance":retScreen);}
+    if(Math.random()<Math.min(.85,.4+totalSpeed()*.02)){log("You fled the battle.");const wasTravel=enemy.isTravel;enemy=null;inCombat=false;gate=null;if(wasTravel)return afterTravel();show(retScreen==="gate-run"?"murim-alliance":retScreen);}
     else{log("You couldn't escape!","bad");enemyTurn();}
   }
 }
@@ -515,9 +585,9 @@ function useAbility(i){
   const a=player.abilities[i];if(!a||player.mp<a.mpCost)return log("Not enough MP!","bad");
   player.mp-=a.mpCost;abOpen=false;
   if(a.effect==="damage"||a.effect==="damage_slow"){
-    const base=a.stat==="magic"?totalMagic():totalAttack();
+    const magic=a.stat==="magic",base=magic?totalMagic():totalAttack();
     if(a.effect==="damage_slow"){enemy.slowT=2;}
-    return hitEnemy(rollCrit(Math.floor(base*a.multiplier)),`You used ${a.name}${a.effect==="damage_slow"?` (${enemy.name} is slowed!)`:""}`);
+    return hitEnemy(rollCrit(calcDamage(Math.floor(base*a.multiplier),magic?"magic":"phys")),`You used ${a.name}${a.effect==="damage_slow"?` (${enemy.name} is slowed!)`:""}`);
   }
   if(a.effect==="defense"){player.buffs.def=a.bonus;player.buffs.defT=a.turns;log(`You used ${a.name}! Defense +${a.bonus} for ${a.turns} turns.`,"info");}
   if(a.effect==="speed"){player.buffs.spd=a.bonus;player.buffs.spdT=a.turns;log(`You used ${a.name}! Speed +${a.bonus} for ${a.turns} turns.`,"info");}
@@ -539,19 +609,20 @@ function useItem(n){
 function hitPlayer(raw,src){
   if(player.buffs.evade){player.buffs.evade=false;log(`You vanish – ${src} misses!`,"good");return;}
   if(Math.random()<dodgeChance()){log(`You dodge ${src}!`,"good");return;}
-  let d=Math.max(1,raw-totalDefense());if(player.defending)d=Math.ceil(d/2);
+  let d=Math.max(2,raw-Math.floor(totalDefense()*.6));if(player.defending)d=Math.max(1,Math.floor(d/2));
   player.hp=Math.max(0,player.hp-d);sfx.hurt();log(`${src} hits you for ${d} damage.`,"bad");
 }
 function enemyTurn(){
   if(!enemy)return;
-  let raw=enemy.attack,src=enemy.name,skip=false;
+  const lv=Math.floor((enemy.level||1)/2);
+  let raw=enemy.attack+lv,src=enemy.name,skip=false;
   if(enemy.isBoss){
     enemy.mp=Math.min(enemy.mp+5,999);
     if(enemy.mp>=20&&Math.random()<.5){
       const ab=pick(enemy.abilities);enemy.mp-=20;
       if(ab==="Attack Boost 4"){enemy.boost=2;skip=true;log(`${enemy.name} used ${ab}! Its next attack will be devastating!`,"bad");}
       else if(ab==="Absolute Rule"){player.buffs={def:0,defT:0,spd:0,spdT:0,evade:false};skip=true;log(`${enemy.name} used ${ab}! All your buffs are nullified!`,"bad");}
-      else{raw=Math.floor(enemy.attack*1.8);src=`${enemy.name}'s ${ab}`;}
+      else{raw=Math.floor(enemy.attack*1.8)+lv;src=`${enemy.name}'s ${ab}`;}
     }
     if(!skip&&enemy.boost){raw*=enemy.boost;enemy.boost=0;}
   }
@@ -566,10 +637,10 @@ function enemyTurn(){
 function clearBuffs(){player.buffs={def:0,defT:0,spd:0,spdT:0,evade:false};player.defending=false;}
 function defeat(){
   const boss=enemy&&enemy.isBoss;enemy=null;inCombat=false;gate=null;clearBuffs();
-  const loss=Math.floor(player.gold*.1);player.gold-=loss;
-  player.hp=Math.ceil(player.maxHp/2);player.mp=Math.floor(totalMaxMp()/2);
-  log(`You were defeated... You wake up weakened${loss?` and lost ${loss} gold`:""}.`,"bad");
-  show(boss?(retScreen||"hunters-guild"):town);
+  player.hp=player.maxHp;player.mp=totalMaxMp();
+  if(mission){log(`Mission failed: ${mission.name}.`,"bad");mission=null;progress=0;}
+  log(boss?"You were defeated by the boss. You recover and return to safety.":"You were defeated. You recover and return to safety.","bad");
+  show(town==="murim-alliance"?"alliance-guild":"hunters-guild");
 }
 function victory(){
   const e=enemy;enemy=null;inCombat=false;clearBuffs();sfx.win();
@@ -579,9 +650,9 @@ function victory(){
     log(`You defeated ${e.name}! Promoted to ${next}-Rank and earned ${g} gold!`,"gold");
     return show(retScreen);
   }
-  const xp=e.xp,g=Math.floor(player.level*10*(1+Math.random()*.4))+e.goldBonus;
+  const xp=e.xp,g=e.gold+(e.goldBonus||0);
   player.xp+=xp;player.gold+=g;if(player.hunterRank)player.hunterXp+=xp;
-  log(`Defeated ${e.name}! +${xp} XP, +${g} gold.`,"good");
+  log(`Defeated Level ${e.level} ${e.name}! +${xp} XP, +${g} gold.`,"good");
   if(mission&&e.name===mission.target){progress++;log(`Mission progress: ${progress}/${mission.count}`,"info");
     if(progress>=mission.count){player.xp+=mission.rewardXP;player.gold+=mission.rewardGold;player.hunterXp+=mission.rewardXP;
       log(`Mission complete: ${mission.name}! +${mission.rewardXP} XP, +${mission.rewardGold} gold.`,"gold");mission=null;progress=0;}}
@@ -590,6 +661,7 @@ function victory(){
       log(`${gate.name} cleared! Bonus: ${r} gold and 100 hunter points.`,"gold");gate=null;return show("gate-selection");}
     gate.wave++;log("Wave cleared. Catch your breath before the next one.","info");
   }
+  if(e.isTravel)return afterTravel();
   show(retScreen);
 }
 
