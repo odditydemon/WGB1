@@ -59,6 +59,33 @@ nav button:active{background:#333}
 .item small{color:var(--mut);display:block}
 pre{white-space:pre-wrap;font:inherit;line-height:1.5}
 .lvl{background:var(--gold);color:#000;font-weight:700;margin:0;min-height:34px;padding:.2rem .6rem;font-size:.8rem}
+.scene,.stage{position:relative;overflow:hidden;border-radius:12px;margin-bottom:.75rem;box-shadow:0 0 12px rgba(0,0,0,.6)}
+.scene{height:120px}.stage{height:175px}
+.scene .ground,.stage .ground{position:absolute;left:0;right:0;bottom:0;height:24%}
+.scene .it{position:absolute;line-height:1;filter:drop-shadow(0 3px 3px rgba(0,0,0,.6));animation:sway 4s ease-in-out infinite alternate}
+@keyframes sway{from{transform:translateY(0)}to{transform:translateY(-3px)}}
+.fighter{position:absolute;bottom:16%;line-height:1;animation:bob 2s ease-in-out infinite;filter:drop-shadow(0 4px 4px rgba(0,0,0,.7))}
+.fighter.pl{left:10%;font-size:3.6rem}
+.fighter.pl img{width:76px;height:76px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,.35);display:block}
+.fighter.en{right:10%;font-size:4.8rem;animation-delay:.4s}
+.fighter.en.boss{font-size:6.2rem;filter:drop-shadow(0 0 14px #f22)}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.fighter.hit{animation:hit .38s}
+@keyframes hit{0%{transform:translateX(0);filter:brightness(2.2)}25%{transform:translateX(-10px)}50%{transform:translateX(9px);filter:brightness(1.6)}75%{transform:translateX(-5px)}100%{transform:translateX(0)}}
+.pop{position:absolute;font-weight:800;font-size:1.5rem;text-shadow:0 2px 5px #000;animation:rise .95s ease-out forwards;pointer-events:none;z-index:3}
+.pop.dmg{color:#fff}.pop.crit{color:var(--gold);font-size:2.1rem}.pop.hurt{color:var(--bad)}.pop.heal{color:var(--good)}.pop.miss{color:#9cf}.pop.buff{color:#8ab4ff}
+@keyframes rise{0%{transform:translateY(0) scale(.7);opacity:0}15%{opacity:1;transform:translateY(-8px) scale(1.1)}100%{transform:translateY(-56px) scale(1);opacity:0}}
+.road-ground{background:#6b5a3c}
+.walker{position:absolute;bottom:17%;font-size:2.2rem;transition:left .5s ease;transform:translateX(-50%);z-index:2}
+.dest{position:absolute;bottom:15%;font-size:2.8rem;line-height:1}
+.portal{width:150px;height:150px;margin:.5rem auto 1rem;border-radius:50%;background:conic-gradient(#ff2a2a,#900,#300,#ff7a1a,#ff2a2a);animation:spin 7s linear infinite;position:relative;box-shadow:0 0 40px rgba(255,0,0,.55)}
+.portal:after{content:"";position:absolute;inset:20px;border-radius:50%;background:radial-gradient(circle,#000 45%,#400 100%)}
+@keyframes spin{to{transform:rotate(360deg)}}
+#dlgBg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:20;align-items:center;justify-content:center;padding:1rem}
+#dlgBg.on{display:flex}
+#dlg{background:var(--panel2);border-radius:14px;padding:1.2rem;max-width:420px;width:100%;line-height:1.4}
+#dlg p{margin-bottom:.8rem}
+.tomb{font-size:5rem;line-height:1;margin:.5rem 0}
 </style>
 </head>
 <body>
@@ -80,6 +107,7 @@ pre{white-space:pre-wrap;font:inherit;line-height:1.5}
   <button onclick="openSheet('quest')">📜<br>Quests</button>
   <button onclick="openSheet('menu')">⚙️<br>Menu</button>
 </nav>
+<div id="dlgBg"><div id="dlg"><p id="dlgMsg"></p><div class="row"><button onclick="dlgYes()">Yes</button><button class="alt" onclick="dlgNo()">Cancel</button></div></div></div>
 <div id="sheetBg" onclick="if(event.target===this)closeSheet()"><div id="sheet"></div></div>
 
 <script>
@@ -185,9 +213,13 @@ let player=null, mission=null, progress=0, gate=null, enemy=null, inCombat=false
 let town="murim-village", retScreen="murim-village", abOpen=false, sheetTab=null, current="title";
 let sel={name:"",gender:null,race:null,class:null,img:null}, rollsLeft=10, logLines=[];
 let soundOn=true, audioCtx=null;
-let travel={alliance:0,village:0,route:null};
+let travel={alliance:0,village:0,route:null},grave=null;
 
 /* ============ UTIL ============ */
+let dlgCb=null;
+function ask(msg,onYes){dlgCb=onYes;$("dlgMsg").textContent=msg;$("dlgBg").classList.add("on");}
+function dlgYes(){$("dlgBg").classList.remove("on");const f=dlgCb;dlgCb=null;if(f)f();}
+function dlgNo(){$("dlgBg").classList.remove("on");dlgCb=null;}
 const rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 const pick=a=>a[Math.floor(Math.random()*a.length)];
 const pct=(a,b)=>Math.max(0,Math.min(100,b?a/b*100:0));
@@ -234,15 +266,57 @@ function loadGame(){
   gate=null;enemy=null;inCombat=false;closeSheet();
   log(`Welcome back, ${player.name}.`,"good"); show(town);
 }
-function newGame(){
-  if(player && !confirm("Start a new game? Unsaved progress will be lost.")) return;
+function newGame(force){
+  if(player && !force){ask("Start a new game? Your current character will be lost.",()=>newGame(true));return;}
   player=null;mission=null;progress=0;gate=null;enemy=null;inCombat=false;travel={alliance:0,village:0,route:null};closeSheet();show("creation");
+}
+
+/* ============ VISUALS ============ */
+const SCENES={
+ "path-selection":{sky:["#1b2a49","#6b4a7a"],ground:"#2b2b1f",items:[["⛰️",4,3.4,20],["🏘️",40,3,12],["🌲",72,2.4,12],["🌙",84,1.6,62]]},
+ "murim-village":{sky:["#243b6b","#e0906a"],ground:"#3a2f1c",items:[["🏡",6,3.2,14],["⛲",40,2.4,14],["🏮",58,1.6,16],["🏘️",68,3.4,14],["🌙",88,1.5,66]]},
+ merchant:{sky:["#3b2a1a","#7a5230"],ground:"#2a1c10",items:[["🛖",8,3.6,14],["🎒",42,2,14],["⚖️",62,2,14],["💰",84,1.8,14]]},
+ "hunters-guild":{sky:["#2a2a3a","#555577"],ground:"#222",items:[["🏛️",12,3.8,14],["⚔️",48,2.2,16],["📜",68,2,16],["🛡️",86,2,14]]},
+ "alliance-guild":{sky:["#2a1030","#7a3a5a"],ground:"#221822",items:[["🏯",12,3.8,14],["⚔️",48,2.2,16],["📜",68,2,16],["🛡️",86,2,14]]},
+ forest:{sky:["#0f2a1a","#2f6a3f"],ground:"#1b2a14",items:[["🌲",2,3.4,14],["🌳",20,3.8,14],["🌲",40,3.2,14],["🍄",55,1.4,12],["🌳",68,3.6,14],["🌲",88,3.2,14]]},
+ "murim-alliance":{sky:["#1a1030","#a04060"],ground:"#2a1f2a",items:[["🏯",6,3.8,14],["🏰",42,3.6,14],["⛩️",76,3.2,14]]},
+ "divine-supply":{sky:["#2b2040","#c9a24b"],ground:"#2a2216",items:[["✨",8,1.6,64],["⛩️",26,3.4,14],["🧪",58,2.2,14],["📿",76,2,14],["✨",90,1.6,58]]},
+ "void-gate":{sky:["#000","#2a0050"],ground:"#0a0014",items:[["🌀",38,5.2,16],["🔒",74,2.4,18]]},
+ "gate-selection":{sky:["#101830","#3a3a7a"],ground:"#14142a",items:[["🌀",10,3.4,14],["🌀",42,4.4,14],["🌀",76,3.2,14]]},
+ "gate-run":{sky:["#0b2030","#2a6a5a"],ground:"#10281e",items:[["🌀",40,4.6,14],["🐇",12,2.2,12],["🐇",76,2.2,12]]}
+};
+function sceneHtml(name){
+  const d=SCENES[name];
+  return `<div class="scene" style="background:linear-gradient(${d.sky[0]},${d.sky[1]})"><div class="ground" style="background:${d.ground}"></div>`+
+    d.items.map(([e,l,sz,b],i)=>`<span class="it" style="left:${l}%;bottom:${b}%;font-size:${sz}rem;animation-delay:${i*.35}s">${e}</span>`).join("")+`</div>`;
+}
+const ENEMY_ICON={Slime:"🟢",Rat:"🐀",Snake:"🐍",Hawk:"🦅","Baby Wyvern":"🐲","Horned Rabbit":"🐇","Horned Rabbit Alpha":"🐰",
+  Bandit:"🦹","Bandit Vet":"🏴‍☠️","Bandit Chief":"👹","Adult Wyvern":"🐉","Fox Spirit":"🦊","Cheon Ma":"😈","Jin Mu":"🧘",Amir:"🐺","Janiece B":"👑"};
+const CLASS_ICON={Warrior:"🤺",Mage:"🧙",Rogue:"🥷"};
+function combatBg(){
+  if(enemy&&enemy.isBoss)return {sky:["#2a0808","#8a1a1a"],ground:"#1a0808"};
+  if(enemy&&enemy.isTravel)return {sky:["#2a2018","#9a7a50"],ground:"#5a4a30"};
+  if(retScreen==="gate-run")return {sky:["#0b2030","#2a6a5a"],ground:"#10281e"};
+  return {sky:["#0f2a1a","#2f6a3f"],ground:"#1b2a14"};
+}
+let fxQueue=[],lastCrit=false;
+function fx(target,text,cls){fxQueue.push({target,text,cls});}
+function flushFx(){
+  const st=$("stage");if(!st){fxQueue=[];return;}
+  fxQueue.forEach((f,i)=>{
+    const spr=$(f.target==="enemy"?"enSprite":"plSprite");
+    if(spr&&(f.cls==="dmg"||f.cls==="crit"||f.cls==="hurt")){spr.classList.add("hit");}
+    const el=document.createElement("span");el.className="pop "+f.cls;el.textContent=f.text;
+    el.style.left=(f.target==="enemy"?"68":"14")+"%";el.style.top="22%";el.style.animationDelay=(i*.18)+"s";
+    st.appendChild(el);setTimeout(()=>el.remove(),1300+i*180);
+  });
+  fxQueue=[];
 }
 
 /* ============ SCREENS ============ */
 const screens={
-  title(){return `<div class="card center"><h3 style="font-size:1.5rem">World's Gate</h3>
-    <p class="muted">Roll your race. Pick your class. Become an S-Rank Hunter.</p>
+  title(){return `<div class="card center"><div class="portal"></div><h3 style="font-size:1.5rem">World's Gate</h3>
+    <p class="muted">Roll your race. Pick your class. Become an S-Rank Hunter.<br><b style="color:var(--bad)">Death is permanent.</b></p>
     ${btn("New Game","newGame()",false,"big")}${hasSave()?btn("Continue","loadGame()",false,"big alt"):""}</div>`;},
 
   creation(){return `<div class="card">
@@ -275,7 +349,7 @@ const screens={
   "hunters-guild"(){return guildHtml("Hunters Guild","guild","murim-village");},
   "alliance-guild"(){return guildHtml("Hunters Guild HG","alliance","murim-alliance");},
 
-  forest(){return `<div class="card"><h3>Forest</h3><p class="muted">Monsters, gold, and the occasional surprise lurk here.</p>
+  forest(){return `<div class="card"><h3>Forest</h3><p class="muted">Monsters, gold, and the occasional surprise lurk here. <b style="color:var(--bad)">Death is permanent.</b></p>
     ${btn("Explore","exploreForest()",false,"big")}${btn("Back","show('murim-village')")}</div>`;},
 
   "murim-alliance"(){const can=player.level>=10&&player.gold>=8000;
@@ -301,6 +375,11 @@ const screens={
     <div class="row">${btn("Next Wave","nextWave()",false,"")}${btn("Use Potion ("+count("Potion")+")","useItem('Potion')",count("Potion")<1,"alt")}
     ${btn("Leave Gate","leaveGate()")}</div></div>`;},
 
+  "game-over"(){return `<div class="card center"><div class="tomb">🪦</div><h3>Here lies ${grave.name}</h3>
+    <p>The ${grave.race} ${grave.cls}, level ${grave.level}, was slain by ${grave.killer} in ${grave.place}.</p>
+    <p class="muted">Death is permanent. Your saved game has been deleted.</p>
+    ${btn("Begin a New Journey","newGame()",false,"big")}</div>`;},
+
   "travel-alliance"(){return travelHtml("alliance");},
   "travel-village"(){return travelHtml("village");},
 
@@ -309,7 +388,7 @@ const screens={
 
 function show(name){
   current=name; if(name==="murim-village"||name==="murim-alliance") town=name;
-  $("area").innerHTML=screens[name](); $("area").scrollTop=0;
+  $("area").innerHTML=(SCENES[name]?sceneHtml(name):"")+screens[name](); $("area").scrollTop=0;
   if(name==="creation") initCreation();
   const on=!!player; $("hud").classList.toggle("on",on); $("tabs").classList.toggle("on",on);
   if(on) updateHud();
@@ -418,15 +497,21 @@ function warp(dest){
 /* ============ TRAVEL ============ */
 function travelHtml(route){
   const dest=route==="alliance"?"Murim Alliance":"Murim Village",n=travel[route],
-        back=route==="alliance"?"murim-village":"murim-alliance";
-  return `<div class="card"><h3>Road to ${dest}</h3>
+        icoEnd=route==="alliance"?"🏯":"🏘️",icoStart=route==="alliance"?"🏘️":"🏯",
+        pos=6+pct(n,TRAVEL_STEPS)*.78;
+  return `<div class="scene" style="background:linear-gradient(#2a2018,#c08a58)"><div class="ground road-ground"></div>
+    <span class="it" style="left:1%;bottom:16%;font-size:2.8rem">${icoStart}</span>
+    <span class="dest" style="right:1%">${icoEnd}</span>
+    <span class="it" style="left:22%;bottom:18%;font-size:2rem">🌲</span><span class="it" style="left:44%;bottom:30%;font-size:2.4rem">⛰️</span><span class="it" style="left:66%;bottom:18%;font-size:2rem">🌲</span>
+    <span class="walker" style="left:${pos}%">🚶</span></div>
+  <div class="card"><h3>Road to ${dest}</h3>
     <p>${route==="alliance"?"The road is long and dangerous.":"The return road stretches far across the land."}</p>
-    <p class="muted">Bandits roam here (Lv 11+). Recommended level 10 or higher.</p>
+    <p class="muted">Bandits roam here (Lv 11+). Recommended level 10 or higher.<br><b style="color:var(--bad)">Death is permanent.</b></p>
     <div class="bar enemy" style="margin:.6rem 0"><i style="width:${pct(n,TRAVEL_STEPS)}%;background:#2d6cdf"></i><span>Travel progress ${n}/${TRAVEL_STEPS}</span></div>
     <div class="row">${btn("Travel",`travelStep('${route}')`)}${btn("Back",`travelBack('${route}')`,false,"alt")}</div></div>`;
 }
-function openTravel(route){
-  if(travel[route]===0&&!confirm(`The road is dangerous (bandits Lv 11+, recommended level 10+). Set out for ${route==="alliance"?"Murim Alliance":"Murim Village"}?`))return;
+function openTravel(route,ok){
+  if(travel[route]===0&&!ok){ask(`The road is deadly: bandits Lv 11+, recommended level 10+. Death is permanent. Set out for ${route==="alliance"?"Murim Alliance":"Murim Village"}?`,()=>openTravel(route,true));return;}
   travel.route=route;show("travel-"+route);
 }
 function travelBack(route){
@@ -505,9 +590,9 @@ function applyHunter(){player.hunterRank="E";log("You registered as an E-rank Hu
 function acceptMission(k,i){if(mission)return log("You already have an active mission.","bad");
   mission={...missionLists[k][i]};progress=0;log(`Accepted mission: ${mission.name}`,"info");show(current);}
 function abandonMission(){if(!mission)return;log(`Abandoned mission: ${mission.name}`);mission=null;progress=0;renderSheet();}
-function rankUp(){
+function rankUp(ok){
   const r=player.hunterRank,b=bosses[r];if(!b||player.hunterXp<rankThresholds[r])return;
-  if(!confirm(`Rank trial: defeat ${b.name}! You can't run from this fight. Begin?`))return;
+  if(!ok){ask(`Rank trial: defeat ${b.name}! You can't run from this fight, and death is permanent. Begin?`,()=>rankUp(true));return;}
   log(`To reach ${RANK_ORDER[RANK_ORDER.indexOf(r)+1]}-Rank you must defeat ${b.name}!`,"bad");
   retScreen=current;
   startCombat({name:b.name,hp:b.hp,maxHp:b.hp,mp:b.mp,attack:b.attack,abilities:b.abilities,isBoss:true,xp:0,boost:0,slowT:0,rank:r});
@@ -543,7 +628,10 @@ function leaveGate(){gate=null;log("You leave the gate.");show("murim-alliance")
 function startCombat(e){enemy=e;inCombat=true;abOpen=false;player.defending=false;closeSheet();show("combat");renderCombat();}
 function combatHtml(){
   if(!enemy)return "";const e=enemy,hasP=count("Potion"),hasS=count("Fire Scroll");
-  let h=`<div class="card ${e.isBoss?"boss":""}"><h3>${e.isBoss?`<span style="color:#f44">BOSS FIGHT</span> – `:""}${e.isBoss?e.name:`Lv ${e.level} ${e.name}`}${gate?` <span class="muted">(Wave ${gate.wave}/${gate.total})</span>`:""}</h3>
+  const bg=combatBg(),icon=ENEMY_ICON[e.name]||"👾",me=player.img?`<img src="${player.img}" alt="">`:CLASS_ICON[player.class];
+  let h=`<div class="stage" id="stage" style="background:linear-gradient(${bg.sky[0]},${bg.sky[1]})"><div class="ground" style="background:${bg.ground}"></div>
+    <div class="fighter pl" id="plSprite">${me}</div><div class="fighter en ${e.isBoss?"boss":""}" id="enSprite">${icon}</div></div>
+  <div class="card ${e.isBoss?"boss":""}"><h3>${e.isBoss?`<span style="color:#f44">BOSS FIGHT</span> – `:""}${e.isBoss?e.name:`Lv ${e.level} ${e.name}`}${gate?` <span class="muted">(Wave ${gate.wave}/${gate.total})</span>`:""}</h3>
   <div class="bar enemy"><i style="width:${pct(e.hp,e.maxHp)}%"></i><span>${e.hp}/${e.maxHp}</span></div>
   <div class="row" style="margin-top:.6rem">${btn("Attack","act('attack')")}${btn("Defend","act('defend')")}${btn("Abilities ▾","toggleAb()",false,"alt")}${btn("Run","act('run')",e.isBoss,"alt")}</div>`;
   if(abOpen){h+=`<div class="lbl" style="margin-top:.4rem">Abilities</div><div class="row">`;
@@ -555,16 +643,16 @@ function combatHtml(){
     if(hasS)h+=btn(`Fire Scroll ×${hasS}`,"useItem('Fire Scroll')",false,"sm alt");h+=`</div>`;}
   return h+`</div>`;
 }
-function renderCombat(){if(!enemy)return;$("area").innerHTML=combatHtml();updateHud();}
+function renderCombat(){if(!enemy)return;$("area").innerHTML=combatHtml();updateHud();flushFx();}
 function toggleAb(){abOpen=!abOpen;renderCombat();}
 
-function rollCrit(d){if(Math.random()<.1){log("Critical hit!","gold");sfx.crit();return Math.floor(d*1.5);}sfx.hit();return d;}
+function rollCrit(d){if(Math.random()<.1){lastCrit=true;log("Critical hit!","gold");sfx.crit();return Math.floor(d*1.5);}lastCrit=false;sfx.hit();return d;}
 function calcDamage(base,kind){
   const def=enemy.defense||0;
   return Math.max(2,base-(kind==="magic"?Math.floor(def/2):def));
 }
 function hitEnemy(d,label){
-  enemy.hp=Math.max(0,enemy.hp-d);log(`${label} for ${d} damage.`);
+  enemy.hp=Math.max(0,enemy.hp-d);log(`${label} for ${d} damage.`);fx('enemy','-'+d,lastCrit?'crit':'dmg');
   if(enemy.hp<=0)return victory();
   enemyTurn();
 }
@@ -589,28 +677,28 @@ function useAbility(i){
     if(a.effect==="damage_slow"){enemy.slowT=2;}
     return hitEnemy(rollCrit(calcDamage(Math.floor(base*a.multiplier),magic?"magic":"phys")),`You used ${a.name}${a.effect==="damage_slow"?` (${enemy.name} is slowed!)`:""}`);
   }
-  if(a.effect==="defense"){player.buffs.def=a.bonus;player.buffs.defT=a.turns;log(`You used ${a.name}! Defense +${a.bonus} for ${a.turns} turns.`,"info");}
-  if(a.effect==="speed"){player.buffs.spd=a.bonus;player.buffs.spdT=a.turns;log(`You used ${a.name}! Speed +${a.bonus} for ${a.turns} turns.`,"info");}
-  if(a.effect==="evasion"){player.buffs.evade=true;log(`You used ${a.name}! You will evade the next attack.`,"info");}
+  if(a.effect==="defense"){fx("player","DEF +"+a.bonus,"buff");player.buffs.def=a.bonus;player.buffs.defT=a.turns;log(`You used ${a.name}! Defense +${a.bonus} for ${a.turns} turns.`,"info");}
+  if(a.effect==="speed"){fx("player","SPD +"+a.bonus,"buff");player.buffs.spd=a.bonus;player.buffs.spdT=a.turns;log(`You used ${a.name}! Speed +${a.bonus} for ${a.turns} turns.`,"info");}
+  if(a.effect==="evasion"){fx("player","Vanish","buff");player.buffs.evade=true;log(`You used ${a.name}! You will evade the next attack.`,"info");}
   enemyTurn();
 }
 function useItem(n){
   const c=consumables[n];if(!c||!player.inventory.includes(n))return;
   if(c.combatOnly&&!inCombat)return log(`${n} can only be used in combat.`,"bad");
   if(c.heal){if(player.hp>=player.maxHp)return log("You're already at full HP.");
-    player.hp=Math.min(player.maxHp,player.hp+c.heal);log(`You used a ${n} and restored ${c.heal} HP.`,"good");}
+    player.hp=Math.min(player.maxHp,player.hp+c.heal);fx('player','+'+c.heal,'heal');log(`You used a ${n} and restored ${c.heal} HP.`,"good");}
   if(c.mana){const mm=totalMaxMp();if(player.mp>=mm)return log("You're already at full MP.");
-    player.mp=Math.min(mm,player.mp+c.mana);log(`You used a ${n} and restored ${c.mana} MP.`,"good");}
-  let d=0;if(c.dmg){d=rollCrit(c.dmg);enemy.hp=Math.max(0,enemy.hp-d);log(`You used a ${n} and dealt ${d} damage to ${enemy.name}.`);}
+    player.mp=Math.min(mm,player.mp+c.mana);fx('player','+'+c.mana+' MP','heal');log(`You used a ${n} and restored ${c.mana} MP.`,"good");}
+  let d=0;if(c.dmg){d=rollCrit(c.dmg);enemy.hp=Math.max(0,enemy.hp-d);fx('enemy','-'+d,lastCrit?'crit':'dmg');log(`You used a ${n} and dealt ${d} damage to ${enemy.name}.`);}
   player.inventory.splice(player.inventory.indexOf(n),1);
   if(inCombat){closeSheet();if(enemy.hp<=0)return victory();enemyTurn();}
   else{updateHud();if(current==="gate-run")show("gate-run");}
 }
 function hitPlayer(raw,src){
-  if(player.buffs.evade){player.buffs.evade=false;log(`You vanish – ${src} misses!`,"good");return;}
-  if(Math.random()<dodgeChance()){log(`You dodge ${src}!`,"good");return;}
+  if(player.buffs.evade){player.buffs.evade=false;fx("player","Miss","miss");log(`You vanish – ${src} misses!`,"good");return;}
+  if(Math.random()<dodgeChance()){fx("player","Dodge","miss");log(`You dodge ${src}!`,"good");return;}
   let d=Math.max(2,raw-Math.floor(totalDefense()*.6));if(player.defending)d=Math.max(1,Math.floor(d/2));
-  player.hp=Math.max(0,player.hp-d);sfx.hurt();log(`${src} hits you for ${d} damage.`,"bad");
+  player.hp=Math.max(0,player.hp-d);sfx.hurt();fx('player','-'+d,'hurt');log(`${src} hits you for ${d} damage.`,"bad");
 }
 function enemyTurn(){
   if(!enemy)return;
@@ -635,13 +723,16 @@ function enemyTurn(){
   renderCombat();
 }
 function clearBuffs(){player.buffs={def:0,defT:0,spd:0,spdT:0,evade:false};player.defending=false;}
-function defeat(){
-  const boss=enemy&&enemy.isBoss;enemy=null;inCombat=false;gate=null;clearBuffs();
-  player.hp=player.maxHp;player.mp=totalMaxMp();
-  if(mission){log(`Mission failed: ${mission.name}.`,"bad");mission=null;progress=0;}
-  log(boss?"You were defeated by the boss. You recover and return to safety.":"You were defeated. You recover and return to safety.","bad");
-  show(town==="murim-alliance"?"alliance-guild":"hunters-guild");
+function permaDeath(){
+  const e=enemy;
+  const place=e.isBoss?"a rank trial":e.isTravel?"the road":gate?"the "+gate.name:"the forest";
+  grave={name:player.name,cls:player.class,race:player.race,level:player.level,killer:e.isBoss?e.name:`a Lv ${e.level} ${e.name}`,place};
+  log(`${player.name} has fallen. There is no coming back.`,"bad");sfx.hurt();
+  enemy=null;inCombat=false;gate=null;mission=null;progress=0;travel={alliance:0,village:0,route:null};
+  try{localStorage.removeItem(SAVE_KEY);}catch(err){}
+  player=null;closeSheet();show("game-over");
 }
+function defeat(){permaDeath();}
 function victory(){
   const e=enemy;enemy=null;inCombat=false;clearBuffs();sfx.win();
   if(e.isBoss){
