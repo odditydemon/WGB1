@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="World's Gate">
+<meta name="theme-color" content="#120000">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>World's Gate</title>
+<style>
+:root{--bg:#0e0e0e;--panel:#1a1a1a;--panel2:#242424;--red:#990000;--red2:#cc1111;--txt:#eee;--mut:#999;--good:#6fdc8c;--bad:#ff6b6b;--gold:#f5c542;--safe-t:env(safe-area-inset-top);--safe-b:env(safe-area-inset-bottom)}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;overscroll-behavior:none}
+body{display:flex;flex-direction:column;height:100dvh;padding-top:var(--safe-t)}
+header{background:var(--red);text-align:center;padding:.5rem}
+header h1{font-size:1.2rem;letter-spacing:.08em}
+header p{font-size:.7rem;opacity:.8}
+#hud{display:none;background:var(--panel);padding:.5rem .75rem;gap:.6rem;align-items:center;border-bottom:1px solid #333}
+#hud.on{display:flex}
+#avatar{width:48px;height:48px;border-radius:8px;object-fit:cover;background:#333;flex:none}
+#hudInfo{flex:1;min-width:0}
+#hudName{font-size:.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#hudGold{color:var(--gold);font-size:.8rem;flex:none;text-align:right}
+.bar{position:relative;height:14px;background:#333;border-radius:7px;overflow:hidden;margin-top:3px}
+.bar i{display:block;height:100%;transition:width .25s}
+.bar span{position:absolute;inset:0;font-size:.62rem;text-align:center;line-height:14px;text-shadow:0 0 3px #000}
+.bar.hp i{background:#c0392b}.bar.mp i{background:#2d6cdf}.bar.enemy{height:18px}.bar.enemy i{background:#8e2b2b}.bar.enemy span{line-height:18px;font-size:.75rem}
+main{flex:1;overflow-y:auto;padding:.75rem;-webkit-overflow-scrolling:touch}
+.card{background:var(--panel);border-radius:10px;padding:1rem;box-shadow:0 0 12px rgba(255,0,0,.2);margin-bottom:.75rem}
+.card.boss{box-shadow:0 0 16px rgba(255,0,0,.7);border:1px solid var(--red2)}
+.card h3{margin-bottom:.5rem}
+.center{text-align:center}.muted{color:var(--mut);font-size:.85rem}
+button{font:inherit;margin:.25rem .25rem .25rem 0;padding:.65rem 1rem;min-height:44px;background:var(--red);border:none;color:#fff;border-radius:8px;touch-action:manipulation;cursor:pointer}
+button:active:enabled{background:var(--red2)}
+button:disabled{background:#4a2222;color:#999}
+button.alt{background:#2a3d5c}button.sel{background:#2e7d32}button.sm{min-height:34px;padding:.3rem .7rem;font-size:.85rem}
+button.big{display:block;width:100%;margin:.6rem 0}
+.row{display:flex;flex-wrap:wrap}
+.lbl{margin:.9rem 0 .3rem;font-weight:700}
+input[type=text]{width:100%;padding:.7rem;border-radius:8px;border:none;font-size:16px;color:#111}
+input[type=file]{font-size:.85rem;color:var(--mut);margin-top:.3rem}
+#imgPrev{display:none;width:64px;height:64px;border-radius:8px;object-fit:cover;margin-top:.4rem}
+#stats{white-space:pre-line;margin-top:.6rem;font-size:.9rem}
+#log{flex:none;height:20vh;min-height:90px;overflow-y:auto;background:#000;border-top:1px solid #333;padding:.4rem .6rem;font-size:.8rem;line-height:1.35}
+#log .good{color:var(--good)}#log .bad{color:var(--bad)}#log .gold{color:var(--gold)}#log .info{color:#8ab4ff}
+nav{display:none;background:var(--panel);border-top:1px solid #333;padding-bottom:var(--safe-b)}
+nav.on{display:flex}
+nav button{flex:1;margin:0;border-radius:0;background:transparent;font-size:.8rem;padding:.4rem 0;min-height:50px}
+nav button:active{background:#333}
+#sheetBg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10;align-items:flex-end}
+#sheetBg.on{display:flex}
+#sheet{background:var(--panel2);width:100%;max-height:80dvh;overflow-y:auto;border-radius:16px 16px 0 0;padding:1rem 1rem calc(1rem + var(--safe-b))}
+#sheet h3{margin-bottom:.6rem}
+.item{display:flex;justify-content:space-between;align-items:center;padding:.35rem 0;border-bottom:1px solid #333;gap:.5rem}
+.item small{color:var(--mut);display:block}
+pre{white-space:pre-wrap;font:inherit;line-height:1.5}
+.lvl{background:var(--gold);color:#000;font-weight:700;margin:0;min-height:34px;padding:.2rem .6rem;font-size:.8rem}
+</style>
+</head>
+<body>
+<header><h1>WORLD'S GATE</h1><p>A Text-Based Fantasy RPG</p></header>
+<div id="hud">
+  <img id="avatar" alt="">
+  <div id="hudInfo">
+    <div id="hudName"></div>
+    <div class="bar hp"><i id="hpFill"></i><span id="hpTxt"></span></div>
+    <div class="bar mp"><i id="mpFill"></i><span id="mpTxt"></span></div>
+  </div>
+  <div id="hudGold"></div>
+</div>
+<main id="area"></main>
+<div id="log"></div>
+<nav id="tabs">
+  <button onclick="openSheet('bag')">🎒<br>Bag</button>
+  <button onclick="openSheet('hero')">👤<br>Hero</button>
+  <button onclick="openSheet('quest')">📜<br>Quests</button>
+  <button onclick="openSheet('menu')">⚙️<br>Menu</button>
+</nav>
+<div id="sheetBg" onclick="if(event.target===this)closeSheet()"><div id="sheet"></div></div>
+
+<script>
+"use strict";
+/* ============ DATA ============ */
+const SAVE_KEY = "worldsGateSave_v2";
+const RANK_ORDER = ["E","D","C","B","A","S"];
+const rankThresholds = {E:500,D:1000,C:2000,B:4000,A:8000,S:null};
+const STATS = ["hp","mp","attack","defense","speed","magic"];
+
+const classes = {
+  Warrior:{hp:120,mp:10,attack:15,defense:10,speed:5,magic:0,inventory:["Potion"],
+    abilities:[
+      {name:"Power Strike",mpCost:5,effect:"damage",stat:"attack",multiplier:1.5,unlockLevel:1},
+      {name:"Shield Bash",mpCost:8,effect:"damage",stat:"attack",multiplier:1.8,unlockLevel:5},
+      {name:"Guard Up",mpCost:10,effect:"defense",bonus:5,turns:3,unlockLevel:10}]},
+  Mage:{hp:70,mp:50,attack:5,defense:5,speed:6,magic:20,inventory:["Fire Scroll"],
+    abilities:[
+      {name:"Fireball",mpCost:8,effect:"damage",stat:"magic",multiplier:1.5,unlockLevel:1},
+      {name:"Ice Shard",mpCost:10,effect:"damage_slow",stat:"magic",multiplier:1.3,unlockLevel:5},
+      {name:"Magic Shield",mpCost:12,effect:"defense",bonus:5,turns:3,unlockLevel:10}]},
+  Rogue:{hp:90,mp:20,attack:10,defense:8,speed:15,magic:5,inventory:["Potion"],
+    abilities:[
+      {name:"Backstab",mpCost:5,effect:"damage",stat:"attack",multiplier:2.0,unlockLevel:1},
+      {name:"Quick Step",mpCost:8,effect:"speed",bonus:5,turns:3,unlockLevel:5},
+      {name:"Shadow Veil",mpCost:10,effect:"evasion",unlockLevel:10}]}
+};
+const growth = {Warrior:{attack:3,defense:3,magic:0,speed:1},Mage:{attack:1,defense:2,magic:3,speed:1},Rogue:{attack:2,defense:2,magic:1,speed:2}};
+
+const races = {
+  Human:{rarity:"Common",chance:50,mods:{hp:0,mp:0,attack:0,defense:0,speed:0,magic:0}},
+  Elf:{rarity:"Uncommon",chance:20,mods:{hp:-5,mp:10,attack:0,defense:0,speed:5,magic:10}},
+  Dwarf:{rarity:"Rare",chance:10,mods:{hp:10,mp:0,attack:5,defense:10,speed:-5,magic:0}},
+  Orc:{rarity:"Rare",chance:10,mods:{hp:15,mp:0,attack:10,defense:5,speed:-5,magic:-5}},
+  Dragon:{rarity:"Epic",chance:5,mods:{hp:20,mp:20,attack:10,defense:10,speed:5,magic:10}},
+  Angel:{rarity:"Legendary",chance:4,mods:{hp:25,mp:25,attack:5,defense:15,speed:5,magic:15}},
+  Demon:{rarity:"Mythic",chance:1,mods:{hp:30,mp:30,attack:15,defense:10,speed:10,magic:20}}
+};
+
+const monsters = {
+  Slime:{hp:30,attack:5,xp:10},Rat:{hp:40,attack:6,xp:15},Snake:{hp:50,attack:8,xp:20},
+  Hawk:{hp:60,attack:10,xp:30},"Baby Wyvern":{hp:100,attack:15,xp:50},
+  "Horned Rabbit":{hp:45,attack:9,xp:25},
+  "Horned Rabbit Alpha":{hp:130,attack:16,xp:100,goldBonus:150}
+};
+const forestPool = ["Slime","Rat","Snake","Hawk","Baby Wyvern"];
+
+const consumables = {
+  "Potion":{price:50,heal:30,desc:"Restores 30 HP"},
+  "Hi-Potion":{price:200,heal:80,desc:"Restores 80 HP"},
+  "Mana Potion":{price:100,mana:30,desc:"Restores 30 MP"},
+  "Fire Scroll":{price:50,dmg:50,combatOnly:true,desc:"50 fire damage (combat only)"}
+};
+
+const equipmentItems = {
+  "Training Sword":{type:"weapon",class:"Warrior",attack:5,price:1000},
+  "Bronze Greatsword":{type:"weapon",class:"Warrior",attack:8,price:1500},
+  "Apprentice Staff":{type:"weapon",class:"Mage",magic:5,price:1000},
+  "Oak Staff":{type:"weapon",class:"Mage",magic:8,price:1500},
+  "Rusty Daggers":{type:"weapon",class:"Rogue",attack:4,speed:2,price:1000},
+  "Twin Daggers":{type:"weapon",class:"Rogue",attack:6,speed:3,price:1500},
+  "Leather Armor":{type:"armor",class:"Warrior",defense:4,price:1000},
+  "Chain Vest":{type:"armor",class:"Warrior",defense:6,price:1500},
+  "Mana Robe":{type:"armor",class:"Mage",defense:2,mp:10,price:1000},
+  "Enchanted Robe":{type:"armor",class:"Mage",defense:3,mp:15,price:1500},
+  "Shadow Cloak":{type:"armor",class:"Rogue",defense:3,speed:2,price:1000},
+  "Silent Cloak":{type:"armor",class:"Rogue",defense:4,speed:3,price:1500}
+};
+
+const bosses = {
+  E:{name:"Adult Wyvern",hp:200,mp:50,attack:25,abilities:["Flame Breath"]},
+  D:{name:"Fox Spirit",hp:300,mp:60,attack:35,abilities:["Fox Fire","Tail Swipe"]},
+  C:{name:"Cheon Ma",hp:400,mp:80,attack:50,abilities:["Sword Energy","Sword Rain","Sword Strike"]},
+  B:{name:"Jin Mu",hp:550,mp:100,attack:70,abilities:["Enhanced Energy Press","Buddha Palm"]},
+  A:{name:"Amir",hp:700,mp:120,attack:90,abilities:["Wolf Pack Barrage","Attack Boost 4"]},
+  S:{name:"Janiece B",hp:900,mp:150,attack:110,abilities:["Absolute Rule","Bow!"]}
+};
+
+const missionLists = {
+  guild:[
+    {name:"Hunt 3 Slimes",target:"Slime",count:3,rewardXP:50,rewardGold:100},
+    {name:"Hunt 2 Snakes",target:"Snake",count:2,rewardXP:80,rewardGold:150},
+    {name:"Hunt 1 Baby Wyvern",target:"Baby Wyvern",count:1,rewardXP:200,rewardGold:300}],
+  alliance:[
+    {name:"Eliminate 3 Hawks",target:"Hawk",count:3,rewardXP:120,rewardGold:200},
+    {name:"Hunt 1 Baby Wyvern",target:"Baby Wyvern",count:1,rewardXP:200,rewardGold:300},
+    {name:"Cleanse 2 Snakes",target:"Snake",count:2,rewardXP:150,rewardGold:250},
+    {name:"Cull 4 Horned Rabbits",target:"Horned Rabbit",count:4,rewardXP:180,rewardGold:280}]
+};
+
+/* ============ STATE ============ */
+const $ = id => document.getElementById(id);
+let player=null, mission=null, progress=0, gate=null, enemy=null, inCombat=false;
+let town="murim-village", retScreen="murim-village", abOpen=false, sheetTab=null, current="title";
+let sel={name:"",gender:null,race:null,class:null,img:null}, rollsLeft=10, logLines=[];
+let soundOn=true, audioCtx=null;
+
+/* ============ UTIL ============ */
+const rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const pct=(a,b)=>Math.max(0,Math.min(100,b?a/b*100:0));
+function btn(label,fn,dis=false,cls=""){return `<button class="${cls}" onclick="${fn}" ${dis?"disabled":""}>${label}</button>`;}
+function log(msg,cls=""){
+  logLines.push(`<div class="${cls}">${msg}</div>`); if(logLines.length>80) logLines.shift();
+  const l=$("log"); l.innerHTML=logLines.join(""); l.scrollTop=l.scrollHeight;
+}
+function beep(f=440,d=.08,type="square",v=.04){
+  if(!soundOn) return;
+  try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.value=f;g.gain.value=v;
+    o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+d);}catch(e){}
+}
+const sfx={hit:()=>beep(220,.08),crit:()=>{beep(440,.06);setTimeout(()=>beep(660,.1),60)},hurt:()=>beep(110,.15,"sawtooth"),
+  win:()=>[523,659,784].forEach((f,i)=>setTimeout(()=>beep(f,.12),i*110)),lvl:()=>[392,523,659,784].forEach((f,i)=>setTimeout(()=>beep(f,.14),i*100))};
+
+/* ============ STAT HELPERS ============ */
+const eq=slot=>player.equipment[slot]?equipmentItems[player.equipment[slot]]:null;
+const totalAttack=()=>player.attack+(eq("weapon")?.attack||0);
+const totalMagic=()=>player.magic+(eq("weapon")?.magic||0);
+const totalDefense=()=>player.defense+(eq("armor")?.defense||0)+player.buffs.def;
+const totalSpeed=()=>player.speed+(eq("weapon")?.speed||0)+(eq("armor")?.speed||0)+player.buffs.spd;
+const totalMaxMp=()=>player.maxMp+(eq("armor")?.mp||0);
+const dodgeChance=()=>Math.min(.35,totalSpeed()*.006);
+const xpNeeded=()=>player.level*100;
+function combinedStats(r,c){const m=races[r].mods,b=classes[c],f={};
+  STATS.forEach(s=>f[s]=Math.min(Math.max(b[s]+m[s],0),999));return f;}
+
+/* ============ SAVE / LOAD ============ */
+const hasSave=()=>{try{return !!localStorage.getItem(SAVE_KEY)}catch(e){return false}};
+function saveGame(quiet){
+  if(!player||inCombat) return;
+  try{localStorage.setItem(SAVE_KEY,JSON.stringify({v:2,player,mission,progress,town}));
+    if(!quiet) log("Game saved.","info");}catch(e){if(!quiet)log("Could not save (storage unavailable).","bad");}
+}
+function loadGame(){
+  let d; try{d=JSON.parse(localStorage.getItem(SAVE_KEY));}catch(e){}
+  if(!d||!d.player){log("No saved game found.","bad");return;}
+  player=d.player; mission=d.mission||null; progress=d.progress||0; town=d.town||"murim-village";
+  player.buffs=player.buffs||{def:0,defT:0,spd:0,spdT:0,evade:false};
+  player.equipment=player.equipment||{weapon:null,armor:null};
+  player.inventory=player.inventory||[]; player.hunterXp=player.hunterXp||0;
+  gate=null;enemy=null;inCombat=false;closeSheet();
+  log(`Welcome back, ${player.name}.`,"good"); show(town);
+}
+function newGame(){
+  if(player && !confirm("Start a new game? Unsaved progress will be lost.")) return;
+  player=null;mission=null;progress=0;gate=null;enemy=null;inCombat=false;closeSheet();show("creation");
+}
+
+/* ============ SCREENS ============ */
+const screens={
+  title(){return `<div class="card center"><h3 style="font-size:1.5rem">World's Gate</h3>
+    <p class="muted">Roll your race. Pick your class. Become an S-Rank Hunter.</p>
+    ${btn("New Game","newGame()",false,"big")}${hasSave()?btn("Continue","loadGame()",false,"big alt"):""}</div>`;},
+
+  creation(){return `<div class="card">
+    <div class="lbl" style="margin-top:0">Your Name</div>
+    <input type="text" id="nameIn" maxlength="20" placeholder="Enter name" oninput="sel.name=this.value.trim();creationCheck()">
+    <div class="lbl">Gender</div><div class="row" id="genderRow"></div>
+    <div class="lbl">Character Image (optional)</div>
+    <input type="file" id="imgIn" accept="image/*"><img id="imgPrev" alt="">
+    <div class="lbl">Roll Your Race</div>
+    ${btn("Roll Race","rollRace()",false,"")}<span id="rolls" class="muted">10 rolls left</span>
+    <div id="rolled" style="margin-top:.3rem"></div>
+    <div class="lbl">Class</div><div class="row" id="classRow"></div>
+    <div id="stats"></div>
+    <button id="startBtn" class="big" disabled onclick="startGame()">Start Game</button></div>`;},
+
+  "path-selection"(){return `<div class="card"><h3>Choose Your Path</h3>
+    <p>Welcome to Murim, a peaceful village surrounded by ancient forests and mysterious ruins.</p>
+    ${btn("Confirm Murim","show('murim-village')",false,"big")}</div>`;},
+
+  "murim-village"(){const can=player.level>=10&&player.gold>=8000;
+    return `<div class="card"><h3>Murim Village</h3>
+    <div class="row">${btn("Visit Merchant","show('merchant')")}${btn("Go to the Woods","show('forest')")}
+    ${btn("Hunters Guild","show('hunters-guild')")}${btn("Inn (30g) – full rest","rest()",false,"alt")}</div>
+    ${btn("Warp Gate to Murim Alliance (8,000g)","warp('murim-alliance')",!can,"big")}
+    ${can?"":`<div class="muted">Warp Gate needs level 10 and 8,000 gold.</div>`}</div>`;},
+
+  merchant(){return shopHtml("Merchant",["Potion","Fire Scroll"],true,"murim-village");},
+  "divine-supply"(){return shopHtml("Divine Supply",["Potion","Hi-Potion","Mana Potion","Fire Scroll"],false,"murim-alliance");},
+
+  "hunters-guild"(){return guildHtml("Hunters Guild","guild","murim-village");},
+  "alliance-guild"(){return guildHtml("Hunters Guild HG","alliance","murim-alliance");},
+
+  forest(){return `<div class="card"><h3>Forest</h3><p class="muted">Monsters, gold, and the occasional surprise lurk here.</p>
+    ${btn("Explore","exploreForest()",false,"big")}${btn("Back","show('murim-village')")}</div>`;},
+
+  "murim-alliance"(){const can=player.level>=10&&player.gold>=8000;
+    return `<div class="card"><h3>Murim Alliance City</h3><p class="muted">A bustling stronghold filled with elite warriors and powerful merchants.</p>
+    <div class="row">${btn("Hunters Guild HG","show('alliance-guild')")}${btn("Divine Supply","show('divine-supply')")}
+    ${btn("Gates","show('gate-selection')")}${btn("Void Gate (Locked)","show('void-gate')",false,"alt")}
+    ${btn("Inn (30g)","rest()",false,"alt")}</div>
+    ${btn("Use Warp Gate (8,000g)","warp('murim-village')",!can,"big")}</div>`;},
+
+  "void-gate"(){return `<div class="card"><h3>Void Gate</h3>
+    <p>This feature is not yet accessible. Return here in a future update to face the 200-floor challenge.</p>
+    ${btn("Back","show('murim-alliance')")}</div>`;},
+
+  "gate-selection"(){const ok=!!player.hunterRank;
+    return `<div class="card"><h3>Select a Gate</h3>
+    ${ok?"":`<p class="muted">Register as a Hunter first.</p>`}
+    ${btn("E Rank – Horned Rabbits (5 waves)","enterGate()",!ok,"big")}
+    ${btn("D Rank – Fox Den (coming soon)","",true,"big")}
+    ${btn("Back","show('murim-alliance')")}</div>`;},
+
+  "gate-run"(){return `<div class="card"><h3>${gate.name}</h3>
+    <p>Wave ${gate.wave} of ${gate.total} awaits.</p>
+    <div class="row">${btn("Next Wave","nextWave()",false,"")}${btn("Use Potion ("+count("Potion")+")","useItem('Potion')",count("Potion")<1,"alt")}
+    ${btn("Leave Gate","leaveGate()")}</div></div>`;},
+
+  combat(){return combatHtml();}
+};
+
+function show(name){
+  current=name; if(name==="murim-village"||name==="murim-alliance") town=name;
+  $("area").innerHTML=screens[name](); $("area").scrollTop=0;
+  if(name==="creation") initCreation();
+  const on=!!player; $("hud").classList.toggle("on",on); $("tabs").classList.toggle("on",on);
+  if(on) updateHud();
+  if(player&&!inCombat&&!["combat","title","creation"].includes(name)) saveGame(true);
+}
+
+/* ============ HUD & SHEETS ============ */
+function updateHud(){
+  if(!player) return;
+  const mm=totalMaxMp();
+  $("hudName").innerHTML=`${player.name} · Lv ${player.level} ${player.class}${player.hunterRank?` · ${player.hunterRank}-Rank`:""}`+
+    (player.xp>=xpNeeded()&&player.level<200?` <button class="lvl" onclick="levelUp()">LEVEL UP</button>`:"");
+  $("hpFill").style.width=pct(player.hp,player.maxHp)+"%"; $("hpTxt").textContent=`HP ${player.hp}/${player.maxHp}`;
+  $("mpFill").style.width=pct(player.mp,mm)+"%"; $("mpTxt").textContent=`MP ${player.mp}/${mm}`;
+  $("hudGold").innerHTML=`💰 ${player.gold}`;
+  const a=$("avatar"); if(player.img){a.src=player.img;a.style.display="block"}else a.style.display="none";
+  if(sheetTab) renderSheet();
+}
+function openSheet(t){if(!player)return;sheetTab=t;$("sheetBg").classList.add("on");renderSheet();}
+function closeSheet(){sheetTab=null;$("sheetBg").classList.remove("on");}
+function count(n){return player.inventory.filter(i=>i===n).length;}
+function renderSheet(){
+  const s=$("sheet"); let h="";
+  const close=`<div style="text-align:right">${btn("Close","closeSheet()",false,"sm alt")}</div>`;
+  if(sheetTab==="bag"){
+    h=`<h3>Inventory</h3><div class="muted">Gold: ${player.gold}</div><div class="lbl">Equipped</div>`;
+    ["weapon","armor"].forEach(sl=>{const n=player.equipment[sl];
+      h+=`<div class="item"><span>${sl}: ${n||"None"}${n?`<small>${statText(equipmentItems[n])}</small>`:""}</span>${n?btn("Unequip",`unequip('${sl}')`,false,"sm alt"):""}</div>`;});
+    h+=`<div class="lbl">Items</div>`;
+    const names=[...new Set(player.inventory)];
+    if(!names.length) h+=`<div class="muted">Your inventory is empty.</div>`;
+    names.forEach(n=>{const c=count(n),e=equipmentItems[n];
+      h+=`<div class="item"><span>${n}${c>1?" ×"+c:""}<small>${e?statText(e):consumables[n].desc}</small></span>${e?btn("Equip",`equipItem('${n}')`,false,"sm"):btn("Use",`useItem('${n}')`,false,"sm")}</div>`;});
+  } else if(sheetTab==="hero"){
+    h=`<h3>Character</h3><pre>Name: ${player.name}  (${player.gender})
+Race: ${player.race} (${races[player.race].rarity})
+Class: ${player.class}   Level: ${player.level}
+XP: ${player.xp}/${xpNeeded()}
+HP: ${player.hp}/${player.maxHp}   MP: ${player.mp}/${totalMaxMp()}
+Attack: ${totalAttack()}   Defense: ${totalDefense()}
+Speed: ${totalSpeed()}   Magic: ${totalMagic()}
+Dodge: ${Math.round(dodgeChance()*100)}%
+Hunter Rank: ${player.hunterRank||"None"}</pre>
+    <div class="lbl">Abilities</div>`+
+    player.abilities.map(a=>`<div class="item"><span>${a.name}<small>${a.mpCost} MP · unlocks Lv ${a.unlockLevel}</small></span><span class="muted">${player.level>=a.unlockLevel?"✔":"🔒"}</span></div>`).join("")+
+    (player.xp>=xpNeeded()&&player.level<200?btn("Level Up","levelUp()",false,"big"):"");
+  } else if(sheetTab==="quest"){
+    h=`<h3>Active Mission</h3>`+(mission?`<pre>${mission.name}\nProgress: ${progress}/${mission.count}\nReward: ${mission.rewardXP} XP, ${mission.rewardGold} gold</pre>${btn("Abandon Mission","abandonMission()",false,"alt")}`:`<div class="muted">No active mission. Visit a Hunters Guild.</div>`);
+    if(player.hunterRank){const n=rankThresholds[player.hunterRank];
+      h+=`<div class="lbl">Hunter Rank ${player.hunterRank}</div><div class="muted">${n?`Hunter points: ${player.hunterXp}/${n}`:"Max rank reached!"}</div>`;}
+  } else if(sheetTab==="menu"){
+    h=`<h3>Menu</h3>${btn("Save Game","saveGame()",inCombat,"big")}${btn("Load Game","if(confirm('Load saved game? Current progress will be lost.'))loadGame()",inCombat||!hasSave(),"big alt")}
+    ${btn("Sound: "+(soundOn?"On":"Off"),"toggleSound()",false,"big alt")}${btn("New Game","closeSheet();newGame()",false,"big alt")}
+    <div class="muted center">The game also autosaves as you play.</div>`;
+  }
+  s.innerHTML=close+h;
+}
+const statText=e=>["attack","defense","magic","speed","mp"].filter(k=>e[k]).map(k=>`+${e[k]} ${k}`).join(", ");
+function toggleSound(){soundOn=!soundOn;renderSheet();}
+
+/* ============ CHARACTER CREATION ============ */
+function initCreation(){
+  sel={name:"",gender:null,race:null,class:null,img:null}; rollsLeft=10;
+  chips("genderRow",["Male","Female","Other"],"gender"); chips("classRow",Object.keys(classes),"class");
+  $("imgIn").onchange=e=>{const f=e.target.files[0]; if(!f||!f.type.startsWith("image/"))return;
+    const r=new FileReader(); r.onload=ev=>{const im=new Image(); im.onload=()=>{
+      const c=document.createElement("canvas");c.width=c.height=96;const s=Math.min(im.width,im.height);
+      c.getContext("2d").drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,96,96);
+      sel.img=c.toDataURL("image/jpeg",.8);$("imgPrev").src=sel.img;$("imgPrev").style.display="block";};im.src=ev.target.result;};r.readAsDataURL(f);};
+}
+function chips(id,opts,key){const c=$(id);c.innerHTML="";
+  opts.forEach(o=>{const b=document.createElement("button");b.textContent=o;
+    b.onclick=()=>{sel[key]=o;[...c.children].forEach(x=>x.classList.remove("sel"));b.classList.add("sel");creationCheck();};c.appendChild(b);});}
+function rollRace(){
+  if(rollsLeft<=0){return;} let r=Math.random()*100,sum=0;
+  for(const [n,i] of Object.entries(races)){sum+=i.chance;if(r<=sum){sel.race=n;break;}}
+  if(!sel.race) sel.race="Human";
+  rollsLeft--; $("rolls").textContent=` ${rollsLeft} rolls left`;
+  $("rolled").textContent=`You rolled: ${sel.race} (${races[sel.race].rarity})`; beep(sel.race==="Demon"?880:330,.1);
+  creationCheck();
+}
+function creationCheck(){
+  $("startBtn").disabled=!(sel.name&&sel.gender&&sel.race&&sel.class);
+  if(sel.race&&sel.class){const s=combinedStats(sel.race,sel.class);
+    $("stats").textContent=`HP ${s.hp}  MP ${s.mp}\nAttack ${s.attack}  Defense ${s.defense}\nSpeed ${s.speed}  Magic ${s.magic}`;}
+}
+function startGame(){
+  const s=combinedStats(sel.race,sel.class),c=classes[sel.class];
+  player={name:sel.name,gender:sel.gender,race:sel.race,class:sel.class,img:sel.img,...s,maxHp:s.hp,maxMp:s.mp,
+    xp:0,gold:0,level:1,hunterXp:0,hunterRank:null,inventory:[...c.inventory],equipment:{weapon:null,armor:null},
+    abilities:c.abilities.map(a=>({...a})),buffs:{def:0,defT:0,spd:0,spdT:0,evade:false},defending:false};
+  mission=null;progress=0;gate=null;logLines=[];log(`${player.name} the ${player.race} ${player.class} begins their journey.`,"info");
+  show("path-selection");
+}
+
+/* ============ TOWN ACTIONS ============ */
+function rest(){
+  if(player.gold<30)return log("Not enough gold for the inn (30g).","bad");
+  player.gold-=30;player.hp=player.maxHp;player.mp=totalMaxMp();log("You rest at the inn. HP and MP fully restored.","good");updateHud();
+}
+function warp(dest){
+  if(player.level<10)return log("You must be level 10 or higher to use the Warp Gate.","bad");
+  if(player.gold<8000)return log("You need 8,000 gold to use the Warp Gate.","bad");
+  if(!confirm("Spend 8,000 gold to use the Warp Gate?"))return;
+  player.gold-=8000;log("You step through the shimmering gate.","info");show(dest);
+}
+function shopHtml(title,items,equip,back){
+  let h=`<div class="card"><h3>${title}</h3><div class="muted">Gold: ${player.gold}</div>`;
+  items.forEach(n=>{const c=consumables[n];h+=`<div class="item"><span>${n} <small>${c.desc}</small></span>${btn(c.price+"g",`buyItem('${n}')`,player.gold<c.price,"sm")}</div>`;});
+  if(equip){h+=`<div class="lbl">Equipment for ${player.class}</div>`;
+    Object.entries(equipmentItems).filter(([,e])=>e.class===player.class).forEach(([n,e])=>{
+      const own=player.inventory.includes(n)||player.equipment.weapon===n||player.equipment.armor===n;
+      h+=`<div class="item"><span>${n}<small>${statText(e)}</small></span>${own?`<span class="muted">Owned</span>`:btn(e.price+"g",`buyEquip('${n}')`,player.gold<e.price,"sm")}</div>`;});}
+  return h+`<div style="margin-top:.8rem">${btn("Back",`show('${back}')`)}</div></div>`;
+}
+function buyItem(n){const c=consumables[n];if(player.gold<c.price)return log("Not enough gold!","bad");
+  player.gold-=c.price;player.inventory.push(n);log(`Bought ${n}.`);show(current);}
+function buyEquip(n){const e=equipmentItems[n];if(player.gold<e.price)return log("Not enough gold!","bad");
+  player.gold-=e.price;player.inventory.push(n);log(`Bought ${n}.`);show(current);}
+function equipItem(n){const e=equipmentItems[n];if(!e)return;
+  if(e.class!==player.class)return log(`${n} cannot be equipped by your class.`,"bad");
+  const old=player.equipment[e.type];if(old)player.inventory.push(old);
+  player.inventory.splice(player.inventory.indexOf(n),1);player.equipment[e.type]=n;
+  player.mp=Math.min(player.mp,totalMaxMp());log(`Equipped ${n}.`,"good");updateHud();
+}
+function unequip(slot){const n=player.equipment[slot];if(!n)return;player.equipment[slot]=null;player.inventory.push(n);
+  player.mp=Math.min(player.mp,totalMaxMp());log(`Unequipped ${n}.`);updateHud();}
+
+/* ============ GUILD / MISSIONS / RANK ============ */
+function guildHtml(title,listKey,back){
+  let h=`<div class="card"><h3>${title}</h3>`;
+  if(!player.hunterRank){h+=`<p class="muted">Register to take missions and challenge the rank trials.</p>${btn("Register as Hunter","applyHunter()",false,"big")}`;}
+  else{const r=player.hunterRank,n=rankThresholds[r];
+    h+=`<p>Rank: <b>${r}</b> ${n?`· Hunter points ${player.hunterXp}/${n}`:"· Max rank"}</p>`;
+    if(n&&player.hunterXp>=n) h+=btn(`Rank Up Trial: ${bosses[r].name}`,"rankUp()",false,"big");
+    h+=`<div class="lbl">Mission Board</div>`;
+    missionLists[listKey].forEach((m,i)=>{h+=`<div class="item"><span>${m.name}<small>${m.rewardXP} XP · ${m.rewardGold}g</small></span>${btn("Accept",`acceptMission('${listKey}',${i})`,!!mission,"sm")}</div>`;});
+    if(mission) h+=`<div class="muted">Active: ${mission.name} (${progress}/${mission.count})</div>`;}
+  return h+`<div style="margin-top:.8rem">${btn("Back",`show('${back}')`)}</div></div>`;
+}
+function applyHunter(){player.hunterRank="E";log("You registered as an E-rank Hunter!","good");show(current);}
+function acceptMission(k,i){if(mission)return log("You already have an active mission.","bad");
+  mission={...missionLists[k][i]};progress=0;log(`Accepted mission: ${mission.name}`,"info");show(current);}
+function abandonMission(){if(!mission)return;log(`Abandoned mission: ${mission.name}`);mission=null;progress=0;renderSheet();}
+function rankUp(){
+  const r=player.hunterRank,b=bosses[r];if(!b||player.hunterXp<rankThresholds[r])return;
+  if(!confirm(`Rank trial: defeat ${b.name}! You can't run from this fight. Begin?`))return;
+  log(`To reach ${RANK_ORDER[RANK_ORDER.indexOf(r)+1]}-Rank you must defeat ${b.name}!`,"bad");
+  retScreen=current;
+  startCombat({name:b.name,hp:b.hp,maxHp:b.hp,mp:b.mp,attack:b.attack,abilities:b.abilities,isBoss:true,xp:0,boost:0,slowT:0,rank:r});
+}
+
+/* ============ EXPLORATION ============ */
+function exploreForest(){
+  const r=Math.random();
+  if(r<.55){
+    let n=pick(forestPool); if(mission&&forestPool.includes(mission.target)&&Math.random()<.4)n=mission.target;
+    retScreen="forest";log(`A wild ${n} appears!`);startCombat(makeMonster(n));
+  }else if(r<.78){const g=rnd(10,30)+player.level*2;player.gold+=g;log(`You found ${g} gold!`,"gold");updateHud();}
+  else if(r<.86){player.inventory.push("Potion");log("You found a Potion in the underbrush!","good");}
+  else log("The forest is quiet...");
+}
+function makeMonster(n){
+  const b=monsters[n],sc=Math.min(3,1+.06*(player.level-1));
+  const hp=Math.round(b.hp*sc);
+  return {name:n,hp,maxHp:hp,attack:Math.round(b.attack*sc),xp:b.xp,goldBonus:b.goldBonus||0,isBoss:false,slowT:0,boost:0};
+}
+function enterGate(){
+  gate={name:"Horned Rabbit Gate",wave:1,total:5};log("You step into the E-Rank Horned Rabbit Gate...","info");nextWave();
+}
+function nextWave(){
+  const n=gate.wave===gate.total?"Horned Rabbit Alpha":"Horned Rabbit";
+  retScreen="gate-run";log(gate.wave===gate.total?"The Alpha Horned Rabbit emerges!":`Wave ${gate.wave}: a Horned Rabbit charges!`);
+  startCombat(makeMonster(n));
+}
+function leaveGate(){gate=null;log("You leave the gate.");show("murim-alliance");}
+
+/* ============ COMBAT ============ */
+function startCombat(e){enemy=e;inCombat=true;abOpen=false;player.defending=false;closeSheet();show("combat");renderCombat();}
+function combatHtml(){
+  if(!enemy)return "";const e=enemy,hasP=count("Potion"),hasS=count("Fire Scroll");
+  let h=`<div class="card ${e.isBoss?"boss":""}"><h3>${e.isBoss?`<span style="color:#f44">BOSS FIGHT</span> – `:""}${e.name}${gate?` <span class="muted">(Wave ${gate.wave}/${gate.total})</span>`:""}</h3>
+  <div class="bar enemy"><i style="width:${pct(e.hp,e.maxHp)}%"></i><span>${e.hp}/${e.maxHp}</span></div>
+  <div class="row" style="margin-top:.6rem">${btn("Attack","act('attack')")}${btn("Defend","act('defend')")}${btn("Abilities ▾","toggleAb()",false,"alt")}${btn("Run","act('run')",e.isBoss,"alt")}</div>`;
+  if(abOpen){h+=`<div class="lbl" style="margin-top:.4rem">Abilities</div><div class="row">`;
+    player.abilities.forEach((a,i)=>{if(player.level>=a.unlockLevel)h+=btn(`${a.name} (${a.mpCost} MP)`,`useAbility(${i})`,player.mp<a.mpCost,"sm");});h+=`</div>`;}
+  if(hasP||hasS){h+=`<div class="lbl" style="margin-top:.4rem">Items</div><div class="row">`;
+    if(hasP)h+=btn(`Potion ×${hasP}`,"useItem('Potion')",false,"sm alt");
+    if(count("Hi-Potion"))h+=btn(`Hi-Potion ×${count("Hi-Potion")}`,"useItem('Hi-Potion')",false,"sm alt");
+    if(count("Mana Potion"))h+=btn(`Mana Potion ×${count("Mana Potion")}`,"useItem('Mana Potion')",false,"sm alt");
+    if(hasS)h+=btn(`Fire Scroll ×${hasS}`,"useItem('Fire Scroll')",false,"sm alt");h+=`</div>`;}
+  return h+`</div>`;
+}
+function renderCombat(){if(!enemy)return;$("area").innerHTML=combatHtml();updateHud();}
+function toggleAb(){abOpen=!abOpen;renderCombat();}
+
+function rollCrit(d){if(Math.random()<.1){log("Critical hit!","gold");sfx.crit();return Math.floor(d*1.5);}sfx.hit();return d;}
+function hitEnemy(d,label){
+  enemy.hp=Math.max(0,enemy.hp-d);log(`${label} for ${d} damage.`);
+  if(enemy.hp<=0)return victory();
+  enemyTurn();
+}
+function act(k){
+  if(!inCombat||!enemy)return;
+  if(k==="attack"){
+    const basic=player.class==="Mage"?Math.max(totalAttack(),Math.floor(totalMagic()*.8)):totalAttack();
+    hitEnemy(rollCrit(basic),`You hit ${enemy.name}`);
+  }else if(k==="defend"){player.defending=true;log("You brace for the attack.");enemyTurn();}
+  else if(k==="run"){
+    if(enemy.isBoss)return log("You can't run from a boss!","bad");
+    if(Math.random()<Math.min(.85,.4+totalSpeed()*.02)){log("You fled the battle.");enemy=null;inCombat=false;gate=null;show(retScreen==="gate-run"?"murim-alliance":retScreen);}
+    else{log("You couldn't escape!","bad");enemyTurn();}
+  }
+}
+function useAbility(i){
+  const a=player.abilities[i];if(!a||player.mp<a.mpCost)return log("Not enough MP!","bad");
+  player.mp-=a.mpCost;abOpen=false;
+  if(a.effect==="damage"||a.effect==="damage_slow"){
+    const base=a.stat==="magic"?totalMagic():totalAttack();
+    if(a.effect==="damage_slow"){enemy.slowT=2;}
+    return hitEnemy(rollCrit(Math.floor(base*a.multiplier)),`You used ${a.name}${a.effect==="damage_slow"?` (${enemy.name} is slowed!)`:""}`);
+  }
+  if(a.effect==="defense"){player.buffs.def=a.bonus;player.buffs.defT=a.turns;log(`You used ${a.name}! Defense +${a.bonus} for ${a.turns} turns.`,"info");}
+  if(a.effect==="speed"){player.buffs.spd=a.bonus;player.buffs.spdT=a.turns;log(`You used ${a.name}! Speed +${a.bonus} for ${a.turns} turns.`,"info");}
+  if(a.effect==="evasion"){player.buffs.evade=true;log(`You used ${a.name}! You will evade the next attack.`,"info");}
+  enemyTurn();
+}
+function useItem(n){
+  const c=consumables[n];if(!c||!player.inventory.includes(n))return;
+  if(c.combatOnly&&!inCombat)return log(`${n} can only be used in combat.`,"bad");
+  if(c.heal){if(player.hp>=player.maxHp)return log("You're already at full HP.");
+    player.hp=Math.min(player.maxHp,player.hp+c.heal);log(`You used a ${n} and restored ${c.heal} HP.`,"good");}
+  if(c.mana){const mm=totalMaxMp();if(player.mp>=mm)return log("You're already at full MP.");
+    player.mp=Math.min(mm,player.mp+c.mana);log(`You used a ${n} and restored ${c.mana} MP.`,"good");}
+  let d=0;if(c.dmg){d=rollCrit(c.dmg);enemy.hp=Math.max(0,enemy.hp-d);log(`You used a ${n} and dealt ${d} damage to ${enemy.name}.`);}
+  player.inventory.splice(player.inventory.indexOf(n),1);
+  if(inCombat){closeSheet();if(enemy.hp<=0)return victory();enemyTurn();}
+  else{updateHud();if(current==="gate-run")show("gate-run");}
+}
+function hitPlayer(raw,src){
+  if(player.buffs.evade){player.buffs.evade=false;log(`You vanish – ${src} misses!`,"good");return;}
+  if(Math.random()<dodgeChance()){log(`You dodge ${src}!`,"good");return;}
+  let d=Math.max(1,raw-totalDefense());if(player.defending)d=Math.ceil(d/2);
+  player.hp=Math.max(0,player.hp-d);sfx.hurt();log(`${src} hits you for ${d} damage.`,"bad");
+}
+function enemyTurn(){
+  if(!enemy)return;
+  let raw=enemy.attack,src=enemy.name,skip=false;
+  if(enemy.isBoss){
+    enemy.mp=Math.min(enemy.mp+5,999);
+    if(enemy.mp>=20&&Math.random()<.5){
+      const ab=pick(enemy.abilities);enemy.mp-=20;
+      if(ab==="Attack Boost 4"){enemy.boost=2;skip=true;log(`${enemy.name} used ${ab}! Its next attack will be devastating!`,"bad");}
+      else if(ab==="Absolute Rule"){player.buffs={def:0,defT:0,spd:0,spdT:0,evade:false};skip=true;log(`${enemy.name} used ${ab}! All your buffs are nullified!`,"bad");}
+      else{raw=Math.floor(enemy.attack*1.8);src=`${enemy.name}'s ${ab}`;}
+    }
+    if(!skip&&enemy.boost){raw*=enemy.boost;enemy.boost=0;}
+  }
+  if(!skip){if(enemy.slowT>0){raw=Math.floor(raw*.6);enemy.slowT--;}hitPlayer(raw,src);}
+  const b=player.buffs;
+  if(b.defT>0&&--b.defT===0){b.def=0;log("Your defense buff wore off.");}
+  if(b.spdT>0&&--b.spdT===0){b.spd=0;log("Your speed buff wore off.");}
+  player.defending=false;player.mp=Math.min(totalMaxMp(),player.mp+(totalMaxMp()>=30?2:1));
+  if(player.hp<=0)return defeat();
+  renderCombat();
+}
+function clearBuffs(){player.buffs={def:0,defT:0,spd:0,spdT:0,evade:false};player.defending=false;}
+function defeat(){
+  const boss=enemy&&enemy.isBoss;enemy=null;inCombat=false;gate=null;clearBuffs();
+  const loss=Math.floor(player.gold*.1);player.gold-=loss;
+  player.hp=Math.ceil(player.maxHp/2);player.mp=Math.floor(totalMaxMp()/2);
+  log(`You were defeated... You wake up weakened${loss?` and lost ${loss} gold`:""}.`,"bad");
+  show(boss?(retScreen||"hunters-guild"):town);
+}
+function victory(){
+  const e=enemy;enemy=null;inCombat=false;clearBuffs();sfx.win();
+  if(e.isBoss){
+    const next=RANK_ORDER[RANK_ORDER.indexOf(e.rank)+1],g=player.level*100;
+    player.hunterXp=Math.max(0,player.hunterXp-rankThresholds[e.rank]);player.gold+=g;player.hunterRank=next;
+    log(`You defeated ${e.name}! Promoted to ${next}-Rank and earned ${g} gold!`,"gold");
+    return show(retScreen);
+  }
+  const xp=e.xp,g=Math.floor(player.level*10*(1+Math.random()*.4))+e.goldBonus;
+  player.xp+=xp;player.gold+=g;if(player.hunterRank)player.hunterXp+=xp;
+  log(`Defeated ${e.name}! +${xp} XP, +${g} gold.`,"good");
+  if(mission&&e.name===mission.target){progress++;log(`Mission progress: ${progress}/${mission.count}`,"info");
+    if(progress>=mission.count){player.xp+=mission.rewardXP;player.gold+=mission.rewardGold;player.hunterXp+=mission.rewardXP;
+      log(`Mission complete: ${mission.name}! +${mission.rewardXP} XP, +${mission.rewardGold} gold.`,"gold");mission=null;progress=0;}}
+  if(gate){
+    if(gate.wave>=gate.total){const r=200+player.level*20;player.gold+=r;player.hunterXp+=100;
+      log(`${gate.name} cleared! Bonus: ${r} gold and 100 hunter points.`,"gold");gate=null;return show("gate-selection");}
+    gate.wave++;log("Wave cleared. Catch your breath before the next one.","info");
+  }
+  show(retScreen);
+}
+
+/* ============ PROGRESSION ============ */
+function levelUp(){
+  if(player.xp<xpNeeded()||player.level>=200)return;
+  const g=growth[player.class];player.xp-=xpNeeded();player.level++;
+  player.maxHp+=10;player.maxMp+=5;player.attack+=g.attack;player.defense+=g.defense;player.magic+=g.magic;player.speed+=g.speed;
+  player.hp=player.maxHp;player.mp=totalMaxMp();sfx.lvl();
+  const unlocked=player.abilities.filter(a=>a.unlockLevel===player.level).map(a=>a.name);
+  log(`Level up! Now level ${player.level}. HP and MP restored.${unlocked.length?" New ability: "+unlocked.join(", ")+"!":""}`,"gold");
+  updateHud();if(current!=="combat")show(current);
+}
+
+/* ============ BOOT ============ */
+log("Welcome to World's Gate.","info");
+show("title");
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+</script>
+</body>
+</html>
